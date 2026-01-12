@@ -32,11 +32,28 @@ DATA_FILE = "data.json"
 
 def fetch_balance(url: str) -> float:
     session = requests.Session()
-    session.headers.update(HEADERS)
 
-    # 先访问首页，建立 cookie
+    session.headers.update({
+        "User-Agent": (
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) "
+            "AppleWebKit/605.1.15 (KHTML, like Gecko) "
+            "Version/16.0 Mobile/15E148 Safari/604.1"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "zh-CN,zh;q=0.9",
+        "Accept-Encoding": "gzip, deflate",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Referer": "https://www.wap.cnyiot.com/",
+    })
+
+    # ① 根路径（种 cookie）
     session.get("https://www.wap.cnyiot.com/", timeout=15)
 
+    # ② nat 目录（非常关键）
+    session.get("https://www.wap.cnyiot.com/nat/", timeout=15)
+
+    # ③ 真实页面
     resp = session.get(url, timeout=15)
     resp.raise_for_status()
 
@@ -46,14 +63,7 @@ def fetch_balance(url: str) -> float:
     if not span:
         raise RuntimeError("未找到 '剩余金额:'")
 
-    parent = span.find_parent("div")
-    if not parent:
-        raise RuntimeError("未找到父级 div")
-
-    label = parent.find("label")
-    if not label:
-        raise RuntimeError("未找到余额 label")
-
+    label = span.find_parent("div").find("label")
     text = label.get_text(strip=True)
 
     match = re.search(r"([\d.]+)", text)
@@ -61,6 +71,7 @@ def fetch_balance(url: str) -> float:
         raise RuntimeError(f"无法解析余额: {text}")
 
     return float(match.group(1))
+
 
 # ========================
 # 下面是通用逻辑，不要改
