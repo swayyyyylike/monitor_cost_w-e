@@ -98,7 +98,6 @@ def main():
             data[-1] = record
         else:
             data.append(record)
-        data.append(record)
         save_data(data)
 
         print("✅ New record added:", record)
