@@ -21,6 +21,7 @@ HEADERS = {
     "Accept-Encoding": "gzip, deflate",
     "Connection": "keep-alive",
     "Upgrade-Insecure-Requests": "1",
+    "Referer": "https://www.wap.cnyiot.com/",
 }
 
 DATA_FILE = "data.json"
@@ -30,42 +31,36 @@ DATA_FILE = "data.json"
 # ========================
 
 def fetch_balance(url: str) -> float:
-    """
-    从页面中解析余额，返回一个 float
-    例如：23.45
-    """
-    resp = requests.get(url, headers=HEADERS, timeout=15)
+    session = requests.Session()
+    session.headers.update(HEADERS)
+
+    # 先访问首页，建立 cookie
+    session.get("https://www.wap.cnyiot.com/", timeout=15)
+
+    resp = session.get(url, timeout=15)
     resp.raise_for_status()
 
-    html = resp.text
+    soup = BeautifulSoup(resp.text, "html.parser")
 
-    # --------------------------------
-    # 在这里写你的解析逻辑
-    # --------------------------------
+    span = soup.find("span", string="剩余金额:")
+    if not span:
+        raise RuntimeError("未找到 '剩余金额:'")
 
-    soup = BeautifulSoup(html, "html.parser")
+    parent = span.find_parent("div")
+    if not parent:
+        raise RuntimeError("未找到父级 div")
 
-    # 查找包含"剩余金额:"的span，然后找到同级的label标签
-    remaining_amount_span = soup.find("span", string="剩余金额:")
-    if not remaining_amount_span:
-        raise RuntimeError("未找到 '剩余金额:' 文本")
-
-    parent_div = remaining_amount_span.find_parent("div")
-    if not parent_div:
-        raise RuntimeError("未找到剩余金额父级 div")
-
-    label = parent_div.find("label")
+    label = parent.find("label")
     if not label:
         raise RuntimeError("未找到余额 label")
 
-    balance_text = label.get_text(strip=True)
+    text = label.get_text(strip=True)
 
-    match = re.search(r"([\d.]+)", balance_text)
+    match = re.search(r"([\d.]+)", text)
     if not match:
-        raise RuntimeError(f"无法解析余额数值: {balance_text}")
+        raise RuntimeError(f"无法解析余额: {text}")
 
     return float(match.group(1))
-
 
 # ========================
 # 下面是通用逻辑，不要改
