@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from bs4 import BeautifulSoup
 
 # ========================
-# 配置区（你只需要看这里）
+# 配置区
 # ========================
 
 URLS = {
@@ -14,47 +14,41 @@ URLS = {
     "electric": "https://www.wap.cnyiot.com/nat/pay.aspx?mid=19105155238",
 }
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (GitHub Actions)",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-    "Accept-Language": "zh-CN,zh;q=0.8,en-US;q=0.5,en;q=0.3",
+DATA_FILE = "data.json"
+
+BASE_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) "
+        "AppleWebKit/605.1.15 (KHTML, like Gecko) "
+        "Version/16.0 Mobile/15E148 Safari/604.1"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "zh-CN,zh;q=0.9",
     "Accept-Encoding": "gzip, deflate",
     "Connection": "keep-alive",
     "Upgrade-Insecure-Requests": "1",
     "Referer": "https://www.wap.cnyiot.com/",
 }
 
-DATA_FILE = "data.json"
+TIMEOUT = 15
 
 # ========================
-# 你只需要实现这个函数
+# 抓取逻辑
 # ========================
 
-def fetch_balance(url: str) -> float:
+def init_session() -> requests.Session:
     session = requests.Session()
+    session.headers.update(BASE_HEADERS)
 
-    session.headers.update({
-        "User-Agent": (
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) "
-            "AppleWebKit/605.1.15 (KHTML, like Gecko) "
-            "Version/16.0 Mobile/15E148 Safari/604.1"
-        ),
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "zh-CN,zh;q=0.9",
-        "Accept-Encoding": "gzip, deflate",
-        "Connection": "keep-alive",
-        "Upgrade-Insecure-Requests": "1",
-        "Referer": "https://www.wap.cnyiot.com/",
-    })
+    # 种 cookie（关键）
+    session.get("https://www.wap.cnyiot.com/", timeout=TIMEOUT)
+    session.get("https://www.wap.cnyiot.com/nat/", timeout=TIMEOUT)
 
-    # ① 根路径（种 cookie）
-    session.get("https://www.wap.cnyiot.com/", timeout=15)
+    return session
 
-    # ② nat 目录（非常关键）
-    session.get("https://www.wap.cnyiot.com/nat/", timeout=15)
 
-    # ③ 真实页面
-    resp = session.get(url, timeout=15)
+def fetch_balance(session: requests.Session, url: str) -> float:
+    resp = session.get(url, timeout=TIMEOUT)
     resp.raise_for_status()
 
     soup = BeautifulSoup(resp.text, "html.parser")
@@ -74,7 +68,7 @@ def fetch_balance(url: str) -> float:
 
 
 # ========================
-# 下面是通用逻辑，不要改
+# 数据读写（保持不变）
 # ========================
 
 def load_data():
@@ -88,15 +82,23 @@ def save_data(data):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
+
 def same_hour(t1, t2):
     return t1[:13] == t2[:13]  # YYYY-MM-DDTHH
 
+
+# ========================
+# 主流程
+# ========================
+
 def main():
     try:
+        session = init_session()
+
         record = {
             "time": datetime.now(timezone.utc).isoformat(),
-            "water": fetch_balance(URLS["water"]),
-            "electric": fetch_balance(URLS["electric"]),
+            "water": fetch_balance(session, URLS["water"]),
+            "electric": fetch_balance(session, URLS["electric"]),
         }
 
         data = load_data()
@@ -104,9 +106,10 @@ def main():
             data[-1] = record
         else:
             data.append(record)
-        save_data(data)
 
+        save_data(data)
         print("✅ New record added:", record)
+
     except Exception as e:
         print(f"❌ Error: {e}")
         raise
